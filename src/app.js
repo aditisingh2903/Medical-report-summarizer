@@ -1,7 +1,9 @@
 import express from "express"
 import cors from "cors"
 import cookieParser from "cookie-parser" // server se browser ki cookie access kr pau aur set kr pau basically crud operations krne ke liye cookie par
-import { User } from "./model/user.model.js"
+import userRoutes from "./routes/user.routes.js"
+import jwt from "jsonwebtoken";
+import reportRoutes from "./routes/report.routes.js"
 
 
 const app = express()
@@ -20,27 +22,19 @@ app.get("/", (req, res) => {
     res.send("API working")
 })
 
-app.get("/test-user", async (req, res) => {
+app.use("/api", userRoutes);
 
-    const user = await User.create({
-        name: "Test User",
-        email: "test@gmail.com",
-        password: "123456"
-    })
 
-    res.json(user)
+app.get("/get-token", (req, res) => {
+  const token = jwt.sign(
+    { _id: "123", email: "test@gmail.com" },
+    process.env.ACCESS_TOKEN_SECRET || "aditi1234",
+    { expiresIn: "1d" }
+  );
 
-})
+  res.json({ token });
+});
 
-app.post("/create-user", async (req, res) => {
-
-    const user = await User.create({
-        name: "Aditi",
-        email: "aditi@test.com",
-        password: "123456"
-    })
-
-    res.json(user)
-})
+app.use("/api/reports", reportRoutes);
 
 export { app }
