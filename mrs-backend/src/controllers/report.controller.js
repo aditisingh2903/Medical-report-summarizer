@@ -1,13 +1,12 @@
 import OpenAI from "openai";
 import { Report } from "../model/report.model.js";
 import fs from "fs";
-//import { createRequire } from "module";
+import Tesseract from "tesseract.js";
+import { createRequire } from "module";
+import path from "path";
 
-/*
 const require = createRequire(import.meta.url);
-const pdfParseLib = require("pdf-parse");
-const pdfParse = require("pdf-parse/lib/pdf-parse.js");
-*/
+const pdfPoppler = require("pdf-poppler");
 
 // 🔥 OpenAI (Groq)
 const openai = new OpenAI({
@@ -16,19 +15,24 @@ const openai = new OpenAI({
 });
 
 // ✅ Upload report
+console.log("Upload controller hit");
 export const uploadReport = async (req, res) => {
   try {
-    const { fileName, filePath } = req.body;
+    if (!req.file) {
+      return res.status(400).json({
+        message: "No file uploaded",
+      });
+    }
 
     const report = await Report.create({
       user: req.user._id,
-      fileName,
-      filePath,
+      fileName: req.file.originalname,
+      filePath: req.file.path, // 🔥 automatic path
       status: "uploaded",
     });
 
     res.status(201).json({
-      message: "Report uploaded successfully",
+      message: "File uploaded successfully",
       report,
     });
   } catch (error) {
@@ -51,7 +55,8 @@ export const getUserReports = async (req, res) => {
   }
 };
 
-// ✅ Process report
+// ✅ Process report (FIXED)
+console.log("process controller hit");
 export const processReport = async (req, res) => {
   try {
     const { reportId } = req.body;
@@ -72,21 +77,41 @@ export const processReport = async (req, res) => {
 
     console.log("REPORT DATA:", report);
 
-    // 🔥 Step 1: Extract PDF text
-    const dataBuffer = fs.readFileSync(report.filePath);
+    // 🔥 Step 1: Convert PDF → Image
+    const outputDir = "uploads/output";
 
-    const pdfData = await pdfParse(dataBuffer);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
 
-    const extractedText = pdfData.text;
+    const options = {
+      format: "png",
+      out_dir: outputDir,
+      out_prefix: "page",
+      page: 1,
+    };
 
-    console.log("==== EXTRACTED TEXT ====");
+    await pdfPoppler.convert(report.filePath, options);
+
+    const imagePath = path.join(outputDir, "page-1.png");
+
+    console.log("Image created at:", imagePath);
+
+    // 🔥 Step 2: OCR
+    const result = await Tesseract.recognize(imagePath, "eng", {
+      logger: (m) => console.log(m),
+    });
+
+    const extractedText = result.data.text;
+
+    console.log("==== OCR TEXT ====");
     console.log(extractedText);
+    const cleanedText = extractedText
+  .replace(/\n+/g, " ")
+  .replace(/\s+/g, " ")
+  .trim();
 
-    // 🔥 Step 2: Set processing
-    report.status = "processing";
-    await report.save();
-
-    // 🔥 Step 3: AI call
+    // 🔥 Step 3: AI
     const response = await openai.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       messages: [
@@ -102,7 +127,7 @@ Analyze the report and return STRICT JSON:
 }
 
 Text:
-${extractedText}`,
+${cleanedText}`,
         },
       ],
     });
@@ -120,7 +145,7 @@ ${extractedText}`,
       };
     }
 
-    // 🔥 Step 4: Save results
+    // 🔥 Step 4: Save
     report.extractedText = extractedText;
     report.summary = parsed.summary;
     report.conditionsDetected = parsed.conditions;
@@ -132,6 +157,10 @@ ${extractedText}`,
       message: "Report processed",
       report,
     });
+
+    console.log("==== AI RESPONSE ====");
+    console.log(content);
+
   } catch (error) {
     console.error(error);
     res.status(500).json({
