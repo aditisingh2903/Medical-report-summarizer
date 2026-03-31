@@ -47,14 +47,33 @@ export default function HistoryList({ reports, loading, onSelect, onRefresh }) {
         </div>
       ) : (
         <div style={styles.grid}>
-          {reports.map((report, i) => (
-            <ReportCard
-              key={report._id}
-              report={report}
-              onSelect={onSelect}
-              index={i}
-            />
-          ))}
+          {reports.map((report, i) => {
+  let parsed = { summary: "", conditions: [] }
+
+  try {
+    const clean = (report.summary || "")
+      .replace(/```json/g, "")
+      .replace(/```/g, "")
+      .trim()
+
+    parsed = JSON.parse(clean)
+  } catch (err) {
+    console.log("History parse error:", err)
+  }
+
+  return (
+    <ReportCard
+      key={report._id}
+      report={{
+        ...report,
+        summary: parsed.summary,
+        conditionsDetected: parsed.conditions,
+      }}
+      onSelect={onSelect}
+      index={i}
+    />
+  )
+})}
         </div>
       )}
     </div>

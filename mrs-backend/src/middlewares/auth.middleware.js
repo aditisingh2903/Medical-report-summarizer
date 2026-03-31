@@ -12,6 +12,7 @@ dotenv.config({path: './.env'});
 
 export const verifyJWT = (req, res, next) => {
 console.log("Verifying JWT...");
+console.log("Authorization Header:", req.headers.authorization);
 
   try {
     const token =

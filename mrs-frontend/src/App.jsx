@@ -12,6 +12,14 @@ export default function App() {
       return u ? JSON.parse(u) : null
     } catch { return null }
   })
+  useEffect(() => {
+  const token = localStorage.getItem("mediscan_token");
+
+  if (token) {
+    setToken(token);
+    setUser({ email: "User" }); // temporary
+  }
+}, []);
   const [toast, setToast] = useState(null)
 
   const showToast = (message, type = 'success') => {

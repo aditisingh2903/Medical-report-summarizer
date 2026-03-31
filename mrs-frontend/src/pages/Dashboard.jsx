@@ -4,8 +4,9 @@ import AnalyzeButton from '../components/AnalyzeButton.jsx'
 import ResultCard from '../components/ResultCard.jsx'
 import HistoryList from '../components/HistoryList.jsx'
 import Loader from '../components/Loader.jsx'
+import api from '../api.js'
 
-const BASE_URL = 'http://localhost:3000'
+const BASE_URL = 'http://localhost:5000'
 
 export default function Dashboard({ token, user, onLogout, showToast }) {
   const [activeTab, setActiveTab] = useState('analyze')
@@ -17,89 +18,133 @@ export default function Dashboard({ token, user, onLogout, showToast }) {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [uploadStatus, setUploadStatus] = useState(null)
   const [selectedReport, setSelectedReport] = useState(null)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
 
-  const authHeaders = {
-    Authorization: `Bearer ${token}`,
+  
+  /*useEffect(() => {
+  const token = localStorage.getItem("token");
+
+  if (token) {
+    setToken(token);
+    setUser({ email: "User" }); // temporary
   }
+}, []);*/
+
 
   const fetchReports = async () => {
-    setHistoryLoading(true)
-    try {
-      const res = await fetch(`${BASE_URL}/api/reports`, { headers: authHeaders })
-      const data = await res.json()
-      if (res.ok) {
-        setReports(Array.isArray(data) ? data : data.reports || [])
-      } else {
-        showToast(data.message || 'Failed to fetch reports.', 'error')
-      }
-    } catch (err) {
-      showToast('Failed to load report history.', 'error')
-    } finally {
-      setHistoryLoading(false)
-    }
+  setHistoryLoading(true)
+  try {
+    const res = await api.get("/api/reports");
+
+    console.log(res.data); // 👈 IMPORTANT (see output)
+
+    setReports(Array.isArray(res.data) ? res.data : res.data.reports || []);
+  } catch (err) {
+    console.error(err);
+    showToast(
+      err.response?.data?.message || "Failed to load report history.",
+      "error"
+    );
+  } finally {
+    setHistoryLoading(false);
   }
+};
 
   useEffect(() => {
     fetchReports()
   }, [])
 
   const handleUpload = async (file) => {
-    setLoading(true)
-    setUploadStatus('uploading')
-    setResult(null)
-    setReportId(null)
-    const formData = new FormData()
-    formData.append('file', file)
-    try {
-      const res = await fetch(`${BASE_URL}/api/reports/upload`, {
-        method: 'POST',
-        headers: authHeaders,
-        body: formData,
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        showToast(data.message || 'Upload failed.', 'error')
-        setUploadStatus('error')
-        return
-      }
-      const id = data.reportId || data._id || data.report?._id
-      setReportId(id)
-      setUploadStatus('success')
-      showToast('Report uploaded successfully!', 'success')
-      fetchReports()
-    } catch (err) {
-      showToast('Upload failed. Please try again.', 'error')
-      setUploadStatus('error')
-    } finally {
-      setLoading(false)
-    }
+  console.log("STEP 1: Function called"); // ✅
+
+  setLoading(true)
+  setUploadStatus('uploading')
+
+  const formData = new FormData()
+  formData.append('file', file)
+
+  try {
+    console.log("STEP 2: Before API"); // ✅
+
+    const res = await api.post("/api/reports/upload", formData)
+
+    console.log("STEP 3: After API", res); // ✅
+
+    const data = res.data
+
+    const id = data.reportId || data._id || data.report?._id
+
+    setReportId(id)
+    setUploadStatus('success')
+
+    console.log("STEP 4: Success done"); // ✅
+
+  } catch (err) {
+    console.log("UPLOAD ERROR:", err) // ❗ VERY IMPORTANT
+    setUploadStatus('error')
+  } finally {
+    setLoading(false)
+    console.log("STEP 5: Finished"); // ✅
   }
+}
 
   const handleAnalyze = async () => {
-    if (!reportId) return
-    setAnalyzing(true)
-    setResult(null)
-    try {
-      const res = await fetch(`${BASE_URL}/api/reports/process`, {
-        method: 'POST',
-        headers: { ...authHeaders, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reportId }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        showToast(data.message || 'Analysis failed.', 'error')
-        return
-      }
-      setResult(data)
-      showToast('Analysis complete!', 'success')
-      fetchReports()
-    } catch (err) {
-      showToast('Analysis failed. Please try again.', 'error')
-    } finally {
-      setAnalyzing(false)
-    }
+  if (!reportId) return
+
+  console.log("STEP A1: Analyze started");
+
+  setAnalyzing(true)
+  setResult(null)
+
+  try {
+    console.log("STEP A2: Before API", reportId);
+
+    const res = await api.post("/api/reports/process", {
+      reportId,
+    });
+
+    console.log("STEP A3: After API", res);
+
+    const data = res.data
+
+    console.log("AI RESPONSE:", res.data);
+
+    const rawSummary = data.report?.summary || ""
+
+let parsed = { summary: "", conditions: [] }
+
+try {
+  // remove ```json ``` wrappers
+  const clean = rawSummary
+    .replace(/```json/g, "")
+    .replace(/```/g, "")
+    .trim()
+
+  parsed = JSON.parse(clean)
+} catch (err) {
+  console.log("Parsing error:", err)
+}
+
+setResult({
+  summary: parsed.summary,
+  conditionsDetected: parsed.conditions,
+})
+
+    console.log("STEP A4: Success", data);
+
+    showToast('Analysis complete!', 'success')
+
+    fetchReports()
+
+  } catch (err) {
+    console.log("ANALYZE ERROR:", err); // 🔥 IMPORTANT
+
+    showToast('Analysis failed. Please try again.', 'error')
+  } finally {
+    setAnalyzing(false)
+    console.log("STEP A5: Done");
   }
+}
 
   const handleSelectReport = (report) => {
     setSelectedReport(report)
@@ -113,7 +158,7 @@ export default function Dashboard({ token, user, onLogout, showToast }) {
   return (
     <div style={styles.root}>
       {/* Sidebar */}
-      <aside style={{ ...styles.sidebar, transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)', '@media (min-width: 768px)': { transform: 'none' } }}>
+        <aside style={styles.sidebar}>
         <div style={styles.sidebarInner}>
           <div style={styles.sidebarBrand}>
             <div style={styles.sidebarLogo}>

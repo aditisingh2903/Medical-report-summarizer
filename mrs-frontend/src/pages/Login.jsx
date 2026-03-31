@@ -1,7 +1,11 @@
 import { useState } from 'react'
+import api from "../api.js";
 //import Loader from '../components/Loader.jsx'
 
-const BASE_URL = 'http://localhost:3000'
+//const [isLogin, setIsLogin] = useState(true);
+
+const BASE_URL = 'http://localhost:5000'
+
 
 export default function Login({ onLogin, showToast }) {
   const [email, setEmail] = useState('')
@@ -9,34 +13,52 @@ export default function Login({ onLogin, showToast }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPass, setShowPass] = useState(false)
+  const [name, setName] = useState('')
+  const [isLogin, setIsLogin] = useState(true);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError('')
-    if (!email || !password) {''
-      setError('Please enter both email and password.')
-      return
-    }
-    setLoading(true)
-    try {
-      const res = await fetch(`${BASE_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.message || 'Invalid credentials. Please try again.')
-        return
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+
+  setLoading(true);
+  setError("");
+
+  try {
+    const res = await api.post(
+      isLogin ? "/api/login" : "/api/register",
+      {
+        email,
+        password,
+        ...(isLogin ? {} : { name }),
       }
-      onLogin(data.token, data.user || { email, name: data.name || email.split('@')[0] })
-    } catch (err) {
-      setError('Unable to connect to the server. Please try again.')
-    } finally {
-      setLoading(false)
-    }
-  }
+    );
 
+    const data = res.data;
+
+    localStorage.setItem("mediscan_token", data.token);
+    localStorage.setItem("mediscan_user", JSON.stringify(data.user));
+
+    if (isLogin) {
+  // LOGIN FLOW
+  localStorage.setItem("mediscan_token", data.token);
+  localStorage.setItem("mediscan_user", JSON.stringify(data.user));
+
+  onLogin(data.token, data.user);
+
+  showToast("Login successful!", "success");
+} else {
+  // REGISTER FLOW
+  showToast("Account created! Please login.", "success");
+
+  setIsLogin(true); // 🔥 switch to login
+  setName("");
+  setPassword("");
+}
+  } catch (err) {
+    setError(err.response?.data?.message || "Something went wrong");
+  } finally {
+    setLoading(false);
+  }
+};
   return (
     <div style={styles.root}>
       <div style={styles.background}>
@@ -95,11 +117,38 @@ export default function Login({ onLogin, showToast }) {
               </div>
               <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', color: 'var(--blue-600)', fontWeight: 600 }}>MediScan AI</span>
             </div>
-            <h2 style={styles.cardTitle}>Sign in to your account</h2>
+           <h2 style={styles.cardTitle}>
+           {isLogin ? "Sign in to your account" : "Create your account"}
+           </h2>
             <p style={styles.cardSub}>Access your medical report dashboard</p>
           </div>
 
+          <p>
+          {isLogin ? "Don't have an account?" : "Already have an account?"}
+          <span 
+          onClick={() => setIsLogin(!isLogin)} 
+          style={{ color: "blue", cursor: "pointer", marginLeft: "5px" }}
+          >
+          {isLogin ? "Register" : "Login"}
+          </span>
+          </p>
+
           <form onSubmit={handleSubmit} style={styles.form}>
+            {!isLogin && (
+  <div style={styles.fieldGroup}>
+    <label style={styles.label}>Full Name</label>
+    <div style={styles.inputWrap}>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Enter your name"
+        style={styles.input}
+        disabled={loading}
+      />
+    </div>
+  </div>
+)}
             <div style={styles.fieldGroup}>
               <label style={styles.label}>Email address</label>
               <div style={styles.inputWrap}>
@@ -171,21 +220,21 @@ export default function Login({ onLogin, showToast }) {
             )}
 
             <button type="submit" style={{ ...styles.submitBtn, opacity: loading ? 0.75 : 1 }} disabled={loading}>
-              {loading ? (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-                  <span style={styles.btnSpinner} />
-                  Signing in...
-                </span>
-              ) : (
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-                  Sign in
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="5" y1="12" x2="19" y2="12"/>
-                    <polyline points="12 5 19 12 12 19"/>
-                  </svg>
-                </span>
-              )}
-            </button>
+  {loading ? (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+      <span style={styles.btnSpinner} />
+      {isLogin ? "Signing in..." : "Creating account..."}
+    </span>
+  ) : (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
+      {isLogin ? "Sign in" : "Register"}
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <line x1="5" y1="12" x2="19" y2="12"/>
+        <polyline points="12 5 19 12 12 19"/>
+      </svg>
+    </span>
+  )}
+</button>
           </form>
 
           <p style={styles.demoHint}>
